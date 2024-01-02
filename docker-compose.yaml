@@ -1,0 +1,53 @@
+volumes:
+  postgres_data: { }
+
+x-app: &x-app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: .docker.env
+  depends_on: &x-app-depends_on
+    db:
+      condition: service_healthy
+
+services:
+  app:
+    <<: *x-app
+    ports:
+      - "8000:8000"
+    command: gunicorn -c gunicorn.conf.py core.wsgi:application
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/ht/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 1s
+    depends_on:
+        <<: *x-app-depends_on
+        migrate:
+          condition: service_completed_successfully
+
+  migrate:
+    <<: *x-app
+    command: python manage.py migrate
+
+
+
+
+  db:
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 1s
